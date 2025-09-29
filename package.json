@@ -1,6 +1,6 @@
 {
     "name": "n8n-nodes-phacet-official",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "description": "n8n community node for Phacet API integration - upload files and manage spreadsheet data",
     "license": "MIT",
     "homepage": "https://phacetlabs.com",
