@@ -31,7 +31,7 @@ export class PhacetApi implements ICredentialType {
 	test: ICredentialTestRequest = {
 		request: {
 			baseURL: 'https://api.phacetlabs.com',
-			url: '/api/v1/user/profile',
+			url: '/api/v1/phacets',
 			method: 'GET',
 		},
 	};
