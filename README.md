@@ -1,6 +1,6 @@
 # n8n-nodes-phacet
 
-![Phacet Logo](https://raw.githubusercontent.com/spx-software/n8n-nodes-phacet/main/nodes/Phacet/phacet.png)
+![Phacet Logo](https://raw.githubusercontent.com/spx-software/n8n-nodes-phacet/main/nodes/Phacet/phacet.svg)
 
 This is an n8n community node for [Phacet](https://phacetlabs.com), a powerful AI-driven spreadsheet platform. It allows you to upload files and manage spreadsheet data directly from your n8n workflows.
 
