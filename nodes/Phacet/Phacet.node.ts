@@ -8,7 +8,12 @@ import type {
 } from 'n8n-workflow';
 
 import { NodeOperationError } from 'n8n-workflow';
-import FormData from 'form-data';
+
+// Use global Buffer
+declare const Buffer: {
+	from: (data: string | Uint8Array, encoding?: string) => Uint8Array;
+	concat: (buffers: Uint8Array[]) => Uint8Array;
+};
 
 export class Phacet implements INodeType {
 	description: INodeTypeDescription = {
@@ -326,23 +331,35 @@ export class Phacet implements INodeType {
 						const binaryDataId = binaryData.id || 'data';
 						const buffer = await this.helpers.getBinaryDataBuffer(i, binaryDataId);
 
-						// Upload file to Phacet using FormData
-						const form = new FormData();
-						form.append('file', buffer, {
-							filename: filename,
-							contentType: 'application/pdf',
-						});
+						// Create multipart form data manually (no external dependencies)
+						const boundary = `----formdata-n8n-${Math.random().toString(16)}`;
+						const CRLF = '\r\n';
 
+						// Build multipart body parts
+						const parts: Uint8Array[] = [];
+
+						// Add file part
+						parts.push(Buffer.from(`--${boundary}${CRLF}`));
+						parts.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}`));
+						parts.push(Buffer.from(`Content-Type: application/pdf${CRLF}${CRLF}`));
+						parts.push(buffer);
+						parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
+
+						// Combine all parts
+						const bodyBuffer = Buffer.concat(parts);
+
+						// Upload file to Phacet
 						const uploadResponse = await this.helpers.httpRequestWithAuthentication.call(
 							this,
 							'phacetApi',
 							{
 								method: 'POST',
 								url: 'https://api.phacetlabs.com/api/v1/files',
-								body: form,
+								body: bodyBuffer,
 								headers: {
-									...form.getHeaders(),
+									'Content-Type': `multipart/form-data; boundary=${boundary}`,
 								},
+								// encoding: null removed as it's not a valid option
 							},
 						);
 
