@@ -1,5 +1,5 @@
 {
-    "name": "n8n-nodes-phacet",
+    "name": "n8n-nodes-phacet-official",
     "version": "0.1.0",
     "description": "n8n community node for Phacet API integration - upload files and manage spreadsheet data",
     "license": "MIT",
@@ -49,5 +49,8 @@
     },
     "peerDependencies": {
         "n8n-workflow": "*"
+    },
+    "dependencies": {
+        "form-data": "^4.0.4"
     }
 }

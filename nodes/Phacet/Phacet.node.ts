@@ -8,12 +8,13 @@ import type {
 } from 'n8n-workflow';
 
 import { NodeOperationError } from 'n8n-workflow';
+import FormData from 'form-data';
 
 export class Phacet implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Phacet',
 		name: 'phacet',
-		icon: 'file:phacet.png',
+		icon: 'file:phacet.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
@@ -325,18 +326,22 @@ export class Phacet implements INodeType {
 						const binaryDataId = binaryData.id || 'data';
 						const buffer = await this.helpers.getBinaryDataBuffer(i, binaryDataId);
 
-						// Upload file to Phacet using n8n native helpers
+						// Upload file to Phacet using FormData
+						const form = new FormData();
+						form.append('file', buffer, {
+							filename: filename,
+							contentType: 'application/pdf',
+						});
+
 						const uploadResponse = await this.helpers.httpRequestWithAuthentication.call(
 							this,
 							'phacetApi',
 							{
 								method: 'POST',
 								url: 'https://api.phacetlabs.com/api/v1/files',
-								body: {
-									file: buffer,
-								},
+								body: form,
 								headers: {
-									'Content-Type': 'multipart/form-data',
+									...form.getHeaders(),
 								},
 							},
 						);
