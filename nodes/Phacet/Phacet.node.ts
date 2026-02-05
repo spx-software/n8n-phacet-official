@@ -15,10 +15,84 @@ declare const Buffer: {
 	concat: (buffers: Uint8Array[]) => Uint8Array;
 };
 
+// Cell configuration interfaces
+interface CellValue {
+	columnId: string;
+	valueType: 'text' | 'file';
+	value?: string;
+	fileSource?: 'upload' | 'fileId';
+	binaryProperty?: string;
+	originalFilename?: string;
+	fileId?: string;
+}
+
+interface CellsConfig {
+	cellValues: CellValue[];
+}
+
+// Helper function to upload a file to Phacet
+async function uploadFile(
+	context: IExecuteFunctions,
+	itemIndex: number,
+	binaryProperty: string,
+	originalFilename?: string
+): Promise<string> {
+	// Get binary data
+	const binaryData = context.helpers.assertBinaryData(itemIndex, binaryProperty);
+	const filename = originalFilename || binaryData.fileName || 'file.pdf';
+
+	// Validate file type (PDF only)
+	if (!filename.toLowerCase().endsWith('.pdf')) {
+		throw new NodeOperationError(
+			context.getNode(),
+			`Only PDF files are supported. File "${filename}" is not a PDF.`,
+			{ itemIndex }
+		);
+	}
+
+	// Get buffer data from binary data
+	const binaryDataId = binaryData.id || 'data';
+	const buffer = await context.helpers.getBinaryDataBuffer(itemIndex, binaryDataId);
+
+	// Create multipart form data manually (no external dependencies)
+	const boundary = `----formdata-n8n-${Math.random().toString(16)}`;
+	const CRLF = '\r\n';
+
+	// Build multipart body parts
+	const parts: Uint8Array[] = [];
+
+	// Add file part
+	parts.push(Buffer.from(`--${boundary}${CRLF}`));
+	parts.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}`));
+	parts.push(Buffer.from(`Content-Type: application/pdf${CRLF}${CRLF}`));
+	parts.push(buffer);
+	parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
+
+	// Combine all parts
+	const bodyBuffer = Buffer.concat(parts);
+
+	// Upload file to Phacet
+	const uploadResponse = await context.helpers.httpRequestWithAuthentication.call(
+		context,
+		'phacetApi',
+		{
+			method: 'POST',
+			url: 'https://api.phacetlabs.com/api/v1/files',
+			body: bodyBuffer,
+			headers: {
+				'Content-Type': `multipart/form-data; boundary=${boundary}`,
+			},
+		},
+	);
+
+	return uploadResponse.id;
+}
+
 export class Phacet implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Phacet',
 		name: 'phacet',
+		usableAsTool: true,
 		icon: 'file:phacet.svg',
 		group: ['transform'],
 		version: 1,
@@ -42,10 +116,6 @@ export class Phacet implements INodeType {
 				type: 'options',
 				noDataExpression: true,
 				options: [
-					{
-						name: 'File',
-						value: 'file',
-					},
 					{
 						name: 'Row',
 						value: 'row',
@@ -72,26 +142,6 @@ export class Phacet implements INodeType {
 					},
 				],
 				default: 'create',
-			},
-			{
-				displayName: 'Operation',
-				name: 'operation',
-				type: 'options',
-				noDataExpression: true,
-				displayOptions: {
-					show: {
-						resource: ['file'],
-					},
-				},
-				options: [
-					{
-						name: 'Upload',
-						value: 'upload',
-						description: 'Upload a PDF file to Phacet',
-						action: 'Upload a file',
-					},
-				],
-				default: 'upload',
 			},
 			// Create Row operation fields
 			{
@@ -151,6 +201,20 @@ export class Phacet implements INodeType {
 						displayName: 'Cell',
 						values: [
 							{
+								displayName: 'Binary Property',
+								name: 'binaryProperty',
+								type: 'string',
+								displayOptions: {
+									show: {
+										valueType: ['file'],
+										fileSource: ['upload'],
+									},
+								},
+								default: 'data',
+								required: true,
+								description: 'Name of the binary property containing the PDF file to upload',
+							},
+							{
 								displayName: 'Column Name or ID',
 								name: 'columnId',
 								type: 'options',
@@ -163,44 +227,88 @@ export class Phacet implements INodeType {
 								description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 							},
 							{
+								displayName: 'File ID',
+								name: 'fileId',
+								type: 'string',
+								displayOptions: {
+									show: {
+										valueType: ['file'],
+										fileSource: ['fileId'],
+									},
+								},
+								default: '',
+								required: true,
+								description: 'The ID of an already uploaded file',
+							},
+							{
+								displayName: 'File Source',
+								name: 'fileSource',
+								type: 'options',
+								displayOptions: {
+									show: {
+										valueType: ['file'],
+									},
+								},
+								options: [
+									{
+										name: 'Upload File',
+										value: 'upload',
+										description: 'Upload a file from binary data',
+									},
+									{
+										name: 'File ID',
+										value: 'fileId',
+										description: 'Use an existing file ID',
+									},
+								],
+								default: 'upload',
+								description: 'Choose how to provide the file',
+							},
+							{
+								displayName: 'Original Filename',
+								name: 'originalFilename',
+								type: 'string',
+								displayOptions: {
+									show: {
+										valueType: ['file'],
+										fileSource: ['upload'],
+									},
+								},
+								default: '',
+								description: 'Original filename (optional, will use binary data filename if not provided)',
+							},
+							{
 								displayName: 'Value',
 								name: 'value',
 								type: 'string',
+								displayOptions: {
+									show: {
+										valueType: ['text'],
+									},
+								},
 								default: '',
-								description: 'The cell value. For text columns: enter text. For file columns: use the file ID returned by the Upload File operation (e.g., "{{$node["Upload File"].JSON["ID"]}}")',
-								placeholder: 'Text value or file ID from previous Upload File node',
+								description: 'The text value for this cell',
+							},
+							{
+								displayName: 'Value Type',
+								name: 'valueType',
+								type: 'options',
+								options: [
+									{
+										name: 'Text',
+										value: 'text',
+									},
+									{
+										name: 'File',
+										value: 'file',
+									},
+								],
+								default: 'text',
+								description: 'Type of value for this cell',
 							},
 						],
 					},
 				],
-			},
-			// Upload File operation fields
-			{
-				displayName: 'Input Binary Field',
-				name: 'binaryProperty',
-				type: 'string',
-				displayOptions: {
-					show: {
-						resource: ['file'],
-						operation: ['upload'],
-					},
-				},
-				default: 'data',
-				required: true,
-				description: 'Name of the binary property containing the PDF file to upload',
-			},
-			{
-				displayName: 'Original Filename',
-				name: 'originalFilename',
-				type: 'string',
-				displayOptions: {
-					show: {
-						resource: ['file'],
-						operation: ['upload'],
-					},
-				},
-				default: '',
-				description: 'Original filename (optional, will use binary data filename if not provided)',
 			},
 		],
 	};
@@ -309,80 +417,10 @@ export class Phacet implements INodeType {
 
 		for (let i = 0; i < items.length; i++) {
 			try {
-				if (resource === 'file') {
-					if (operation === 'upload') {
-						const binaryProperty = this.getNodeParameter('binaryProperty', i) as string;
-						const originalFilename = this.getNodeParameter('originalFilename', i) as string;
-
-						// Get binary data
-						const binaryData = this.helpers.assertBinaryData(i, binaryProperty);
-						const filename = originalFilename || binaryData.fileName || 'file.pdf';
-
-						// Validate file type (PDF only)
-						if (!filename.toLowerCase().endsWith('.pdf')) {
-							throw new NodeOperationError(
-								this.getNode(),
-								`Only PDF files are supported. File "${filename}" is not a PDF.`,
-								{ itemIndex: i }
-							);
-						}
-
-						// Get buffer data from binary data
-						const binaryDataId = binaryData.id || 'data';
-						const buffer = await this.helpers.getBinaryDataBuffer(i, binaryDataId);
-
-						// Create multipart form data manually (no external dependencies)
-						const boundary = `----formdata-n8n-${Math.random().toString(16)}`;
-						const CRLF = '\r\n';
-
-						// Build multipart body parts
-						const parts: Uint8Array[] = [];
-
-						// Add file part
-						parts.push(Buffer.from(`--${boundary}${CRLF}`));
-						parts.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}`));
-						parts.push(Buffer.from(`Content-Type: application/pdf${CRLF}${CRLF}`));
-						parts.push(buffer);
-						parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
-
-						// Combine all parts
-						const bodyBuffer = Buffer.concat(parts);
-
-						// Upload file to Phacet
-						const uploadResponse = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'phacetApi',
-							{
-								method: 'POST',
-								url: 'https://api.phacetlabs.com/api/v1/files',
-								body: bodyBuffer,
-								headers: {
-									'Content-Type': `multipart/form-data; boundary=${boundary}`,
-								},
-								// encoding: null removed as it's not a valid option
-							},
-						);
-
-						returnData.push({
-							json: {
-								id: uploadResponse.id,
-								filename: filename,
-								originalFilename: filename,
-								...uploadResponse,
-							},
-							pairedItem: { item: i },
-						});
-					}
-				} else if (resource === 'row') {
-					if (operation === 'create') {
+				if (resource === 'row' && operation === 'create') {
 						const phacetId = this.getNodeParameter('phacetId', i) as string;
 						const sessionId = this.getNodeParameter('sessionId', i) as string;
-						const cells = this.getNodeParameter('cells', i) as {
-							cellValues: Array<{
-								columnId: string;
-								value?: string;
-							}>;
-						};
+						const cells = this.getNodeParameter('cells', i) as CellsConfig;
 
 						// Validate inputs
 						if (!phacetId) {
@@ -399,11 +437,41 @@ export class Phacet implements INodeType {
 						const processedCells: Array<{ columnId: string; value: string }> = [];
 
 						for (const cell of cells.cellValues) {
-							// All cells are now treated as text values (including file IDs)
-							processedCells.push({
-								columnId: cell.columnId,
-								value: cell.value || '',
-							});
+							if (cell.valueType === 'file') {
+								if (cell.fileSource === 'fileId') {
+									// Use existing file ID
+									processedCells.push({
+										columnId: cell.columnId,
+										value: cell.fileId || '',
+									});
+								} else {
+									// Upload file and get ID
+									try {
+										const fileId = await uploadFile(
+											this,
+											i,
+											cell.binaryProperty!,
+											cell.originalFilename
+										);
+										processedCells.push({
+											columnId: cell.columnId,
+											value: fileId,
+										});
+									} catch (error) {
+										throw new NodeOperationError(
+											this.getNode(),
+											`Failed to upload file for cell: ${error.message}`,
+											{ itemIndex: i }
+										);
+									}
+								}
+							} else {
+								// Text value
+								processedCells.push({
+									columnId: cell.columnId,
+									value: cell.value || '',
+								});
+							}
 						}
 
 						// Prepare the request body
@@ -436,7 +504,6 @@ export class Phacet implements INodeType {
 							pairedItem: { item: i },
 						});
 					}
-				}
 			} catch (error) {
 				if (this.continueOnFail()) {
 					returnData.push({

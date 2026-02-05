@@ -11,13 +11,10 @@
         "data-management",
         "file-upload"
     ],
-    "author": {
-        "name": "Christophe Lanternier",
-        "email": "christophe@phacetlabs.com"
-    },
+    "author": "Christophe Lanternier <christophe@phacetlabs.com>",
     "repository": {
         "type": "git",
-        "url": "https://github.com/spx-software/n8n-phacet-official"
+        "url": "git+https://github.com/spx-software/n8n-phacet-official.git"
     },
     "scripts": {
         "build": "n8n-node build",
@@ -49,5 +46,12 @@
     },
     "peerDependencies": {
         "n8n-workflow": "*"
+    },
+    "main": ".prettierrc.js",
+    "dependencies": {
+        "n8n-workflow": "^2.7.0"
+    },
+    "bugs": {
+        "url": "https://github.com/spx-software/n8n-phacet-official/issues"
     }
 }
