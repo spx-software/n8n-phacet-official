@@ -73,6 +73,12 @@ export class Phacet implements INodeType {
 						action: 'Create a row',
 					},
 					{
+						name: 'Update',
+						value: 'update',
+						description: 'Updates an existing row in a specific AI Table with new cell values',
+						action: 'Update a row',
+					},
+					{
 						name: 'Get',
 						value: 'get',
 						description: 'Retrieve a row by its ID from a specific AI Table',
@@ -210,6 +216,122 @@ export class Phacet implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['row'],
+						operation: ['get', 'update'],
+					},
+				},
+				default: '',
+				typeOptions: {
+					loadOptionsMethod: 'getPhacets',
+				},
+				description: 'Select the phacet where the row will be retrieved. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+			},
+			{
+				displayName: 'Row ID',
+				name: 'rowId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['row'],
+						operation: ['get', 'update'],
+					},
+				},
+				default: '',
+				description: 'ID of the row to retrieve',
+			},
+			{
+				displayName: 'Cells',
+				name: 'cells',
+				type: 'fixedCollection',
+				displayOptions: {
+					show: {
+						resource: ['row'],
+						operation: ['update'],
+					},
+				},
+				default: {},
+				description: 'The cell data for the new row',
+				placeholder: 'Add Cell',
+				typeOptions: {
+					multipleValues: true,
+				},
+				options: [
+					{
+						name: 'cellValues',
+						displayName: 'Cell',
+						values: [
+							{
+								displayName: 'Column Name or ID',
+								name: 'columnId',
+								type: 'options',
+								default: '',
+								required: true,
+								typeOptions: {
+									loadOptionsMethod: 'getColumns',
+									loadOptionsDependsOn: ['phacetId'],
+								},
+								description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+							},
+							{
+								displayName: 'Input Binary Field',
+								name: 'binaryProperty',
+								type: 'string',
+								default: 'data',
+								displayOptions: {
+									show: {
+										type: ['file'],
+									},
+								},
+								description: 'Name of the binary property containing the PDF file',
+							},
+							{
+								displayName: 'Original Filename',
+								name: 'originalFilename',
+								type: 'string',
+								default: '',
+								displayOptions: {
+									show: {
+										type: ['file'],
+									},
+								},
+								description: 'Original filename (optional, will use binary data filename if not provided)',
+							},
+							{
+								displayName: 'Type',
+								name: 'type',
+								type: 'options',
+								options: [
+									{ name: 'Text', value: 'text' },
+									{ name: 'File', value: 'file' },
+								],
+								default: 'text',
+							},
+							{
+								displayName: 'Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								displayOptions: {
+									show: {
+										type: ['text'],
+									},
+								},
+								description: 'The cell value. For text columns: enter text.',
+								placeholder: 'Text value',
+							},
+						],
+					},
+				],
+			},
+			// Get Row operation fields
+			{
+				displayName: 'Phacet Name or ID',
+				name: 'phacetId',
+				type: 'options',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['row'],
 						operation: ['get'],
 					},
 				},
@@ -233,7 +355,7 @@ export class Phacet implements INodeType {
 				default: '',
 				description: 'ID of the row to retrieve',
 			},
-		],
+					],
 	};
 
 	methods = {
@@ -456,6 +578,71 @@ export class Phacet implements INodeType {
 						);
 
 						// Return the response data
+						const result = {
+							...responseData,
+						};
+
+						returnData.push({
+							json: result,
+							pairedItem: { item: i },
+						});
+					} else if (operation === 'update') {
+						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const rowId = this.getNodeParameter('rowId', i) as string;
+						const cells = this.getNodeParameter('cells', i) as {
+							cellValues: Array<{
+								columnId: string;
+								value?: string;
+								type?: 'text' | 'file';
+								binaryProperty?: string;
+								originalFilename?: string;
+							}>;
+						};
+
+						if (!phacetId) {
+							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						}
+						if (!rowId) {
+							throw new NodeOperationError(this.getNode(), 'Row ID is required', { itemIndex: i });
+						}
+						if (!cells.cellValues || cells.cellValues.length === 0) {
+							throw new NodeOperationError(this.getNode(), 'At least one cell is required', { itemIndex: i });
+						}
+
+						const processedCells: Array<{ columnId: string; value: string }> = [];
+
+						for (const cell of cells.cellValues) {
+							if (cell.type === 'file') {
+								const { id: fileId } = await this.uploadFile(i, cell.binaryProperty!, cell.originalFilename);
+								processedCells.push({
+									columnId: cell.columnId,
+									value: fileId,
+								});
+							} else {
+								processedCells.push({
+									columnId: cell.columnId,
+									value: cell.value || '',
+								});
+							}
+						}
+
+						const requestBody = {
+							cells: processedCells,
+						};
+
+						const responseData = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'phacetApi',
+							{
+								method: 'PUT',
+								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}`,
+								body: requestBody,
+								headers: {
+									'Content-Type': 'application/json',
+								},
+							},
+						);
+
 						const result = {
 							...responseData,
 						};
