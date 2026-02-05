@@ -15,6 +15,11 @@ declare const Buffer: {
 	concat: (buffers: Uint8Array[]) => Uint8Array;
 };
 
+// Custom interface for execute functions to include uploadFile
+interface IPhacetExecuteFunctions extends IExecuteFunctions {
+	uploadFile(itemIndex: number, binaryPropertyName: string, originalFilename?: string): Promise<{ id: string; filename: string }>;
+}
+
 export class Phacet implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Phacet',
@@ -66,6 +71,12 @@ export class Phacet implements INodeType {
 						value: 'create',
 						description: 'Create a new row in a phacet',
 						action: 'Create a row',
+					},
+					{
+						name: 'Get',
+						value: 'get',
+						description: 'Retrieve a row by its ID from a specific AI Table',
+						action: 'Get a row',
 					},
 				],
 				default: 'create',
@@ -128,67 +139,99 @@ export class Phacet implements INodeType {
 						displayName: 'Cell',
 						values: [
 							{
-									displayName: 'Column Name or ID',
-									name: 'columnId',
-									type: 'options',
-									default: '',
-									required: true,
-									typeOptions: {
-										loadOptionsMethod: 'getColumns',
-										loadOptionsDependsOn: ['phacetId'],
+								displayName: 'Column Name or ID',
+								name: 'columnId',
+								type: 'options',
+								default: '',
+								required: true,
+								typeOptions: {
+									loadOptionsMethod: 'getColumns',
+									loadOptionsDependsOn: ['phacetId'],
+								},
+								description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+							},
+							{
+								displayName: 'Input Binary Field',
+								name: 'binaryProperty',
+								type: 'string',
+								default: 'data',
+								displayOptions: {
+									show: {
+										type: ['file'],
 									},
-									description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 								},
-								{
-									displayName: 'Type',
-									name: 'type',
-									type: 'options',
-									options: [
-										{ name: 'Text', value: 'text' },
-										{ name: 'File', value: 'file' },
-									],
-									default: 'text',
-								},
-								{
-									displayName: 'Value',
-									name: 'value',
-									type: 'string',
-									default: '',
-									displayOptions: {
-										show: {
-											type: ['text'],
-										},
+								description: 'Name of the binary property containing the PDF file',
+							},
+							{
+								displayName: 'Original Filename',
+								name: 'originalFilename',
+								type: 'string',
+								default: '',
+								displayOptions: {
+									show: {
+										type: ['file'],
 									},
-									description: 'The cell value. For text columns: enter text.',
-									placeholder: 'Text value',
 								},
-								{
-									displayName: 'Input Binary Field',
-									name: 'binaryProperty',
-									type: 'string',
-									default: 'data',
-									displayOptions: {
-										show: {
-											type: ['file'],
-										},
+								description: 'Original filename (optional, will use binary data filename if not provided)',
+							},
+							{
+								displayName: 'Type',
+								name: 'type',
+								type: 'options',
+								options: [
+									{ name: 'Text', value: 'text' },
+									{ name: 'File', value: 'file' },
+								],
+								default: 'text',
+							},
+							{
+								displayName: 'Value',
+								name: 'value',
+								type: 'string',
+								default: '',
+								displayOptions: {
+									show: {
+										type: ['text'],
 									},
-									description: 'Name of the binary property containing the PDF file',
 								},
-								{
-									displayName: 'Original Filename',
-									name: 'originalFilename',
-									type: 'string',
-									default: '',
-									displayOptions: {
-										show: {
-											type: ['file'],
-										},
-									},
-									description: 'Original filename (optional, will use binary data filename if not provided)',
-								},
+								description: 'The cell value. For text columns: enter text.',
+								placeholder: 'Text value',
+							},
 						],
 					},
 				],
+			},
+			// Get Row operation fields
+			{
+				displayName: 'Phacet Name or ID',
+				name: 'phacetId',
+				type: 'options',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['row'],
+						operation: ['get'],
+					},
+				},
+				default: '',
+				typeOptions: {
+					loadOptionsMethod: 'getPhacets',
+				},
+				description: 'Select the phacet where the row will be retrieved. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+			},
+			{
+				displayName: 'Row ID',
+				name: 'rowId',
+				type: 'string',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['row'],
+						operation: ['get'],
+					},
+				},
+				default: '',
+				description: 'ID of the row to retrieve',
 			},
 		],
 	};
@@ -288,107 +331,6 @@ export class Phacet implements INodeType {
 		},
 	};
 
-	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		const items = this.getInputData();
-		const resource = this.getNodeParameter('resource', 0) as string;
-		const operation = this.getNodeParameter('operation', 0) as string;
-
-		const returnData: INodeExecutionData[] = [];
-
-		for (let i = 0; i < items.length; i++) {
-			try {
-				if (resource === 'row') {
-					if (operation === 'create') {
-						const phacetId = this.getNodeParameter('phacetId', i) as string;
-						const sessionId = this.getNodeParameter('sessionId', i) as string;
-						const cells = this.getNodeParameter('cells', i) as {
-							cellValues: Array<{
-								columnId: string;
-								type: 'text' | 'file';
-								value?: string;
-								binaryProperty?: string;
-								originalFilename?: string;
-							}>;
-						};
-
-						// Validate inputs
-						if (!phacetId) {
-							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
-						}
-						if (!sessionId) {
-							throw new NodeOperationError(this.getNode(), 'Session ID is required', { itemIndex: i });
-						}
-						if (!cells.cellValues || cells.cellValues.length === 0) {
-							throw new NodeOperationError(this.getNode(), 'At least one cell is required', { itemIndex: i });
-						}
-
-						// Process cells
-						const processedCells: Array<{ columnId: string; value: string }> = [];
-
-						for (const cell of cells.cellValues) {
-							if (cell.type === 'file') {
-								if (!cell.binaryProperty) {
-									throw new NodeOperationError(this.getNode(), 'Binary property name is required for file cells', { itemIndex: i });
-								}
-								const { id: fileId } = await this.uploadFile(i, cell.binaryProperty, cell.originalFilename);
-								processedCells.push({
-									columnId: cell.columnId,
-									value: fileId,
-								});
-							} else {
-								processedCells.push({
-									columnId: cell.columnId,
-									value: cell.value || '',
-								});
-							}
-						}
-
-						// Prepare the request body
-						const requestBody = {
-							sessionId,
-							cells: processedCells,
-						};
-
-						// Make the API call
-						const responseData = await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'phacetApi',
-							{
-								method: 'POST',
-								url: `https://api.phacetlabs.com/api/v1/phacets/${phacetId}/rows`,
-								body: requestBody,
-								headers: {
-									'Content-Type': 'application/json',
-								},
-							},
-						);
-
-						// Return the response data
-						const result = {
-							...responseData,
-						};
-
-						returnData.push({
-							json: result,
-							pairedItem: { item: i },
-						});
-					}
-				}
-			} catch (error) {
-				if (this.continueOnFail()) {
-					returnData.push({
-						json: { error: error.message },
-						pairedItem: { item: i },
-					});
-					continue;
-				}
-				throw error;
-			}
-		}
-
-		return [returnData];
-	}
-
 	async uploadFile(this: IExecuteFunctions, itemIndex: number, binaryPropertyName: string, originalFilename?: string) {
 		// Get binary data
 		const binaryData = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
@@ -399,7 +341,7 @@ export class Phacet implements INodeType {
 			throw new NodeOperationError(
 				this.getNode(),
 				`Only PDF files are supported. File "${filename}" is not a PDF.`,
-				{ itemIndex }
+				{ itemIndex },
 			);
 		}
 
@@ -441,4 +383,123 @@ export class Phacet implements INodeType {
 		return { id: uploadResponse.id, filename };
 	}
 
+	async execute(this: IPhacetExecuteFunctions): Promise<INodeExecutionData[][]> {
+		const items = this.getInputData();
+		const resource = this.getNodeParameter('resource', 0) as string;
+		const operation = this.getNodeParameter('operation', 0) as string;
+
+		const returnData: INodeExecutionData[] = [];
+
+		for (let i = 0; i < items.length; i++) {
+			try {
+				if (resource === 'row') {
+					if (operation === 'create') {
+						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const sessionId = this.getNodeParameter('sessionId', i) as string;
+						const cells = this.getNodeParameter('cells', i) as {
+							cellValues: Array<{
+								columnId: string;
+								value?: string;
+								type?: 'text' | 'file';
+								binaryProperty?: string;
+								originalFilename?: string;
+							}>;
+						};
+
+						// Validate inputs
+						if (!phacetId) {
+							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						}
+						if (!sessionId) {
+							throw new NodeOperationError(this.getNode(), 'Session ID is required', { itemIndex: i });
+						}
+						if (!cells.cellValues || cells.cellValues.length === 0) {
+							throw new NodeOperationError(this.getNode(), 'At least one cell is required', { itemIndex: i });
+						}
+
+						// Process cells
+						const processedCells: Array<{ columnId: string; value: string }> = [];
+
+						for (const cell of cells.cellValues) {
+							if (cell.type === 'file') {
+								const { id: fileId } = await this.uploadFile(i, cell.binaryProperty!, cell.originalFilename);
+								processedCells.push({
+									columnId: cell.columnId,
+									value: fileId,
+								});
+							} else {
+								processedCells.push({
+									columnId: cell.columnId,
+									value: cell.value || '',
+								});
+							}
+						}
+
+						// Prepare the request body
+						const requestBody = {
+							sessionId,
+							cells: processedCells,
+						};
+
+						// Make the API call
+						const responseData = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'phacetApi',
+							{
+								method: 'POST',
+								url: `https://api.phacetlabs.com/api/v1/phacets/${phacetId}/rows`,
+								body: requestBody,
+								headers: {
+									'Content-Type': 'application/json',
+								},
+							},
+						);
+
+						// Return the response data
+						const result = {
+							...responseData,
+						};
+
+						returnData.push({
+							json: result,
+							pairedItem: { item: i },
+						});
+					} else if (operation === 'get') {
+						// Get Row operation logic
+						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const rowId = this.getNodeParameter('rowId', i) as string;
+
+						if (!phacetId) {
+							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						}
+						if (!rowId) {
+							throw new NodeOperationError(this.getNode(), 'Row ID is required', { itemIndex: i });
+						}
+
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'phacetApi',
+							{
+								method: 'GET',
+								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}`,
+							},
+						);
+
+						returnData.push({
+							json: response,
+							pairedItem: { item: i },
+						});
+					}
+				}
+			} catch (error) {
+				if (this.continueOnFail()) {
+					returnData.push({ json: { error: (error as Error).message } });
+					continue;
+				}
+				throw error;
+			}
+		}
+
+		return [returnData];
+	}
 }
