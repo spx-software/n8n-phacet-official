@@ -84,6 +84,12 @@ export class Phacet implements INodeType {
 						description: 'Retrieve a row by its ID from a specific AI Table',
 						action: 'Get a row',
 					},
+					{
+						name: 'Get Cell Download URL',
+						value: 'getCellDownloadUrl',
+						description: 'Gets a temporary download URL for a file stored in a file-type column',
+						action: 'Get a cell download URL',
+					},
 				],
 				default: 'create',
 			},
@@ -216,7 +222,7 @@ export class Phacet implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['row'],
-						operation: ['get', 'update'],
+						operation: ['get', 'update', 'getCellDownloadUrl'],
 					},
 				},
 				default: '',
@@ -233,11 +239,29 @@ export class Phacet implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['row'],
-						operation: ['get', 'update'],
+						operation: ['get', 'update', 'getCellDownloadUrl'],
 					},
 				},
 				default: '',
 				description: 'ID of the row to retrieve',
+			},
+			{
+				displayName: 'Column Name or ID',
+				name: 'columnId',
+				type: 'options',
+				required: true,
+				displayOptions: {
+					show: {
+						resource: ['row'],
+						operation: ['getCellDownloadUrl'],
+					},
+				},
+				default: '',
+				typeOptions: {
+					loadOptionsMethod: 'getColumns',
+					loadOptionsDependsOn: ['phacetId'],
+				},
+				description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Cells',
@@ -649,6 +673,34 @@ export class Phacet implements INodeType {
 
 						returnData.push({
 							json: result,
+							pairedItem: { item: i },
+						});
+					} else if (operation === 'getCellDownloadUrl') {
+						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const rowId = this.getNodeParameter('rowId', i) as string;
+						const columnId = this.getNodeParameter('columnId', i) as string;
+
+						if (!phacetId) {
+							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						}
+						if (!rowId) {
+							throw new NodeOperationError(this.getNode(), 'Row ID is required', { itemIndex: i });
+						}
+						if (!columnId) {
+							throw new NodeOperationError(this.getNode(), 'Column ID is required', { itemIndex: i });
+						}
+
+						const response = await this.helpers.httpRequestWithAuthentication.call(
+							this,
+							'phacetApi',
+							{
+								method: 'GET',
+								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}/cells/${columnId}/download-file-url`,
+							},
+						);	
+
+						returnData.push({
+							json: response,
 							pairedItem: { item: i },
 						});
 					} else if (operation === 'get') {
