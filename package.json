@@ -37,7 +37,8 @@
             "dist/credentials/PhacetApi.credentials.js"
         ],
         "nodes": [
-            "dist/nodes/Phacet/Phacet.node.js"
+            "dist/nodes/Phacet/Phacet.node.js",
+            "dist/nodes/Phacet/PhacetTrigger.node.js"
         ]
     },
     "devDependencies": {
