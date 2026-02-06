@@ -292,16 +292,16 @@ export class Phacet implements INodeType {
 				displayOptions: {
 					show: {
 						resource: ['row'],
-						operation: ['get', 'update', 'getCellDownloadUrl'],
+						operation: ['get', 'update'],
 					},
 				},
 				default: '',
 				description: 'ID of the row to retrieve',
 			},
 			{
-				displayName: 'Column Name or ID',
-				name: 'columnId',
-				type: 'options',
+				displayName: 'Cell ID',
+				name: 'cellId',
+				type: 'string',
 				required: true,
 				displayOptions: {
 					show: {
@@ -310,11 +310,7 @@ export class Phacet implements INodeType {
 					},
 				},
 				default: '',
-				typeOptions: {
-					loadOptionsMethod: 'getColumns',
-					loadOptionsDependsOn: ['phacetId'],
-				},
-				description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				description: 'ID of the cell containing the file. You can get cell IDs from the response of a "Get Row" operation.',
 			},
 			{
 				displayName: 'Cells',
@@ -670,17 +666,13 @@ export class Phacet implements INodeType {
 						});
 					} else if (operation === 'getCellDownloadUrl') {
 						const phacetId = this.getNodeParameter('phacetId', i) as string;
-						const rowId = this.getNodeParameter('rowId', i) as string;
-						const columnId = this.getNodeParameter('columnId', i) as string;
+						const cellId = this.getNodeParameter('cellId', i) as string;
 
 						if (!phacetId) {
 							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
 						}
-						if (!rowId) {
-							throw new NodeOperationError(this.getNode(), 'Row ID is required', { itemIndex: i });
-						}
-						if (!columnId) {
-							throw new NodeOperationError(this.getNode(), 'Column ID is required', { itemIndex: i });
+						if (!cellId) {
+							throw new NodeOperationError(this.getNode(), 'Cell ID is required', { itemIndex: i });
 						}
 
 						const response = await this.helpers.httpRequestWithAuthentication.call(
@@ -688,7 +680,7 @@ export class Phacet implements INodeType {
 							'phacetApi',
 							{
 								method: 'GET',
-								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}/cells/${columnId}/download-file-url`,
+								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/cells/${cellId}/download-file-url`,
 							},
 						);	
 
