@@ -130,22 +130,23 @@ export class PhacetTrigger implements INodeType {
 				if (!webhookUrl) {
 					throw new NodeOperationError(this.getNode(), 'Could not determine the n8n webhook URL');
 				}
-
+			// USEFUL FOR LOCAL DEVELOPMENT
 				// Force a public base URL (ngrok) while preserving the n8n-generated path
 				// Example: replace http://localhost:5678 with https://xxxx.ngrok-free.app
-				if (local) {
-					const forcedBaseUrl = '<something like https://xxxx.ngrok-free.app>';
-					try {
-						const originalUrl = new URL(webhookUrl);
-						const forcedUrl = new URL(forcedBaseUrl);
-						webhookUrl = `${forcedUrl.origin}${originalUrl.pathname}${originalUrl.search}${originalUrl.hash}`;
-					} catch {
-						throw new NodeOperationError(
-							this.getNode(),
-							`Invalid webhook URL configuration. Original: "${webhookUrl}", forced base: "${forcedBaseUrl}"`,
-						);
-					}
-				}
+				// if (local) {
+				// 	const forcedBaseUrl = '<something like https://xxxx.ngrok-free.app>';
+				// 	try {
+				// 		const originalUrl = new URL(webhookUrl);
+				// 		const forcedUrl = new URL(forcedBaseUrl);
+				// 		webhookUrl = `${forcedUrl.origin}${originalUrl.pathname}${originalUrl.search}${originalUrl.hash}`;
+				// 	} catch {
+				// 		throw new NodeOperationError(
+				// 			this.getNode(),
+				// 			`Invalid webhook URL configuration. Original: "${webhookUrl}", forced base: "${forcedBaseUrl}"`,
+				// 		);
+				// 	}
+				// }
+				
 				const eventType = this.getNodeParameter('event', 0) as string;
 				const phacetId = this.getNodeParameter('phacetId', 0) as string;
 
