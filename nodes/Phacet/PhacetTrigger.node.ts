@@ -125,7 +125,7 @@ export class PhacetTrigger implements INodeType {
 					phacetId?: string;
 				};
 
-				let webhookUrl = this.getNodeWebhookUrl('default');
+				const webhookUrl = this.getNodeWebhookUrl('default');
 
 				if (!webhookUrl) {
 					throw new NodeOperationError(this.getNode(), 'Could not determine the n8n webhook URL');
@@ -146,7 +146,7 @@ export class PhacetTrigger implements INodeType {
 				// 		);
 				// 	}
 				// }
-				
+
 				const eventType = this.getNodeParameter('event', 0) as string;
 				const phacetId = this.getNodeParameter('phacetId', 0) as string;
 
