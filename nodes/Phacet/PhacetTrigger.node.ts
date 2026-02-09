@@ -1,5 +1,6 @@
 import type {
 	IDataObject,
+	IHookFunctions,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
@@ -7,6 +8,8 @@ import type {
 	IWebhookResponseData,
 	ILoadOptionsFunctions,
 } from 'n8n-workflow';
+
+import { NodeOperationError } from 'n8n-workflow';
 
 export class PhacetTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -67,12 +70,13 @@ export class PhacetTrigger implements INodeType {
 				displayName: 'Table Name or ID',
 				name: 'phacetId',
 				type: 'options',
+				required: true,
 				default: '',
 				typeOptions: {
 					loadOptionsMethod: 'getPhacets',
 				},
 				description:
-					'Filter events for a specific table. Leave empty to receive events from all tables. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					'Select the table (phacetId / tableId) to create a dedicated webhook endpoint for. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						event: [
@@ -101,6 +105,126 @@ export class PhacetTrigger implements INodeType {
 				},
 			},
 		],
+	};
+
+	webhookMethods = {
+		default: {
+			async checkExists(this: IHookFunctions): Promise<boolean> {
+				const staticData = this.getWorkflowStaticData('node') as IDataObject & {
+					webhookEndpointId?: string;
+					webhookUrl?: string;
+					eventType?: string;
+					phacetId?: string;
+				};
+
+				const webhookUrl = this.getNodeWebhookUrl('default');
+				const eventType = this.getNodeParameter('event', 0) as string;
+				const phacetId = this.getNodeParameter('phacetId', 0) as string;
+
+				return (
+					!!staticData.webhookEndpointId &&
+					staticData.webhookUrl === webhookUrl &&
+					staticData.eventType === eventType &&
+					staticData.phacetId === phacetId
+				);
+			},
+
+			async create(this: IHookFunctions): Promise<boolean> {
+
+				const local = true;
+				const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
+
+				const staticData = this.getWorkflowStaticData('node') as IDataObject & {
+					webhookEndpointId?: string;
+					webhookSecret?: string;
+					webhookUrl?: string;
+					eventType?: string;
+					phacetId?: string;
+				};
+
+				let webhookUrl = this.getNodeWebhookUrl('default');
+
+				if (!webhookUrl) {
+					throw new NodeOperationError(this.getNode(), 'Could not determine the n8n webhook URL');
+				}
+
+				// Force a public base URL (ngrok) while preserving the n8n-generated path
+				// Example: replace http://localhost:5678 with https://xxxx.ngrok-free.app
+				if (local) {
+					const forcedBaseUrl = 'https://subverticilate-conchologically-deedra.ngrok-free.dev';
+					try {
+						const originalUrl = new URL(webhookUrl);
+						const forcedUrl = new URL(forcedBaseUrl);
+						webhookUrl = `${forcedUrl.origin}${originalUrl.pathname}${originalUrl.search}${originalUrl.hash}`;
+					} catch {
+						throw new NodeOperationError(
+							this.getNode(),
+							`Invalid webhook URL configuration. Original: "${webhookUrl}", forced base: "${forcedBaseUrl}"`,
+						);
+					}
+				}
+				const eventType = this.getNodeParameter('event', 0) as string;
+				const phacetId = this.getNodeParameter('phacetId', 0) as string;
+
+				if (!eventType) {
+					throw new NodeOperationError(this.getNode(), 'Event is required to create a webhook endpoint');
+				}
+				if (!phacetId) {
+					throw new NodeOperationError(this.getNode(), 'Table (phacetId) is required to create a webhook endpoint');
+				}
+
+				const body = {
+					url: webhookUrl,
+					eventTypes: [eventType],
+					tableIds: [phacetId],
+					description: `n8n:${this.getWorkflow().id}:${this.getNode().name}`,
+				};
+
+				const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'phacetApi', {
+					method: 'POST',
+					url: `${baseUrl}/api/v2/webhooks/endpoints`,
+					body,
+					headers: {
+						accept: 'application/json',
+						'content-type': 'application/json',
+					},
+				})) as IDataObject;
+
+				// Response shape may vary; store best-effort identifiers
+				staticData.webhookEndpointId =
+					(response.endpointId as string | undefined) ??
+					(response.id as string | undefined) ??
+					staticData.webhookEndpointId;
+				staticData.webhookSecret = (response.secret as string | undefined) ?? staticData.webhookSecret;
+				staticData.webhookUrl = webhookUrl;
+				staticData.eventType = eventType;
+				staticData.phacetId = phacetId;
+
+				return true;
+			},
+
+			/**
+			 * We intentionally do NOT delete the remote endpoint on Phacet.
+			 * On deactivation, we only clear local static data so re-activation will create a new endpoint.
+			 */
+			async delete(this: IHookFunctions): Promise<boolean> {
+				const staticData = this.getWorkflowStaticData('node') as IDataObject & {
+					webhookEndpointId?: string;
+					webhookSecret?: string;
+					webhookUrl?: string;
+					eventType?: string;
+					phacetId?: string;
+				};
+
+				delete staticData.webhookEndpointId;
+				delete staticData.webhookSecret;
+				delete staticData.webhookUrl;
+				delete staticData.eventType;
+				delete staticData.phacetId;
+
+				return true;
+			},
+		},
 	};
 
 	methods = {
@@ -195,7 +319,7 @@ export class PhacetTrigger implements INodeType {
 				);
 				outputData.row = rowData;
 			} catch {
-				// Row data is a bonus — don't fail the trigger if it can't be fetched
+				// don't fail the trigger if it can't be fetched
 			}
 		}
 
