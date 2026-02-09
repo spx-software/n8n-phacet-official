@@ -87,23 +87,6 @@ export class PhacetTrigger implements INodeType {
 					},
 				},
 			},
-			{
-				displayName: 'Resolve Data',
-				name: 'resolveData',
-				type: 'boolean',
-				default: true,
-				description:
-					'Whether to automatically fetch the full row data when a row event is received. Requires a table to be selected.',
-				displayOptions: {
-					show: {
-						event: [
-							'row.calculation.completed',	
-							'row.calculation.failed',
-							'row.created',
-						],
-					},
-				},
-			},
 		],
 	};
 
@@ -131,7 +114,7 @@ export class PhacetTrigger implements INodeType {
 
 			async create(this: IHookFunctions): Promise<boolean> {
 
-				const local = true;
+				const local = false;
 				const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
 
 				const staticData = this.getWorkflowStaticData('node') as IDataObject & {
@@ -151,7 +134,7 @@ export class PhacetTrigger implements INodeType {
 				// Force a public base URL (ngrok) while preserving the n8n-generated path
 				// Example: replace http://localhost:5678 with https://xxxx.ngrok-free.app
 				if (local) {
-					const forcedBaseUrl = 'https://subverticilate-conchologically-deedra.ngrok-free.dev';
+					const forcedBaseUrl = '<something like https://xxxx.ngrok-free.app>';
 					try {
 						const originalUrl = new URL(webhookUrl);
 						const forcedUrl = new URL(forcedBaseUrl);
@@ -177,7 +160,7 @@ export class PhacetTrigger implements INodeType {
 					url: webhookUrl,
 					eventTypes: [eventType],
 					tableIds: [phacetId],
-					description: `n8n:${this.getWorkflow().id}:${this.getNode().name}`,
+					description: `n8n workflow: ${this.getWorkflow().name}`,
 				};
 
 				const response = (await this.helpers.httpRequestWithAuthentication.call(this, 'phacetApi', {
@@ -203,10 +186,6 @@ export class PhacetTrigger implements INodeType {
 				return true;
 			},
 
-			/**
-			 * We intentionally do NOT delete the remote endpoint on Phacet.
-			 * On deactivation, we only clear local static data so re-activation will create a new endpoint.
-			 */
 			async delete(this: IHookFunctions): Promise<boolean> {
 				const staticData = this.getWorkflowStaticData('node') as IDataObject & {
 					webhookEndpointId?: string;
@@ -215,6 +194,23 @@ export class PhacetTrigger implements INodeType {
 					eventType?: string;
 					phacetId?: string;
 				};
+
+				if (staticData.webhookEndpointId) {
+					try {
+						const local = false;
+						const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
+						await this.helpers.httpRequestWithAuthentication.call(this, 'phacetApi', {
+							method: 'DELETE',
+							url: `${baseUrl}/api/v2/webhooks/endpoints/${staticData.webhookEndpointId}`,
+							headers: {
+								accept: 'application/json',
+								'content-type': 'application/json',
+							},
+						});
+					} catch (error) {
+						this.logger.warn(`Failed to delete Svix endpoint ${staticData.webhookEndpointId}: ${error.message}`);
+					}
+				}
 
 				delete staticData.webhookEndpointId;
 				delete staticData.webhookSecret;
@@ -230,11 +226,9 @@ export class PhacetTrigger implements INodeType {
 	methods = {
 		loadOptions: {
 			async getPhacets(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				// Get the 'local' parameter
-				const local = true;
+				const local = false;
 				const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
 
-				// Récupérer tous les projets avec leurs tables via l'API v2
 				const projectsResponse = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
@@ -249,7 +243,6 @@ export class PhacetTrigger implements INodeType {
 
 				const allTables: INodePropertyOptions[] = [];
 
-				// Parcourir chaque projet et extraire ses tables
 				if (Array.isArray(projectsResponse)) {
 					projectsResponse.forEach((project: { id: string; name: string; tables: Array<{ id: string; name: string }> }) => {
 						if (project.tables && Array.isArray(project.tables)) {
@@ -272,22 +265,18 @@ export class PhacetTrigger implements INodeType {
 		const body = this.getBodyData() as IDataObject;
 		const configuredEvent = this.getNodeParameter('event', 0) as string;
 		const phacetId = this.getNodeParameter('phacetId', 0) as string;
-		const resolveData = this.getNodeParameter('resolveData', 0) as boolean;
 
-		// Filter by event type - ignore if not matching
 		if (body.eventType !== configuredEvent) {
 			return { workflowData: [] };
 		}
 
-		// Extract event data — Phacet sends { eventType, eventId, data: { ... } }
 		const eventData = (body.data ?? body) as IDataObject;
 
-		// Filter by table - ignore if phacetId is configured and doesn't match
 		if (phacetId && eventData.phacetId && eventData.phacetId !== phacetId) {
 			return { workflowData: [] };
 		}
 
-		const local = true;
+		const local = false;
 		const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
 
 		const outputData: IDataObject = {
@@ -296,15 +285,13 @@ export class PhacetTrigger implements INodeType {
 			...eventData,
 		};
 
-		// Include phacetId from config (useful since some events don't include it)
 		if (phacetId) {
 			outputData.phacetId = phacetId;
 		}
 
-		// Automatically fetch the full row data when possible
 		const rowId = eventData.rowId as string | undefined;
 
-		if (resolveData && rowId && phacetId) {
+		if (rowId && phacetId) {
 			try {
 				const rowData = await this.helpers.httpRequestWithAuthentication.call(
 					this,
@@ -319,7 +306,7 @@ export class PhacetTrigger implements INodeType {
 				);
 				outputData.row = rowData;
 			} catch {
-				// don't fail the trigger if it can't be fetched
+				this.logger.warn(`Failed to fetch row data for row ${rowId} in table ${phacetId}`);
 			}
 		}
 

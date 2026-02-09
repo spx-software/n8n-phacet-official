@@ -9,7 +9,6 @@ import type {
 
 import { NodeOperationError } from 'n8n-workflow';
 
-// Use global Buffer
 declare const Buffer: {
 	from: (data: string | Uint8Array, encoding?: string) => Uint8Array;
 	concat: (buffers: Uint8Array[]) => Uint8Array;
@@ -21,11 +20,9 @@ const uploadFile = async function (
 	binaryPropertyName: string,
 	originalFilename?: string,
 ): Promise<{ id: string; filename: string }> {
-	// Get binary data
 	const binaryData = this.helpers.assertBinaryData(itemIndex, binaryPropertyName);
 	const filename = originalFilename || binaryData.fileName || 'file.pdf';
 
-	// Validate file type (PDF only)
 	if (!filename.toLowerCase().endsWith('.pdf')) {
 		throw new NodeOperationError(
 			this.getNode(),
@@ -34,29 +31,21 @@ const uploadFile = async function (
 		);
 	}
 
-	// Get buffer data from binary property name
-	// Note: `getBinaryDataBuffer()` expects the binary property key (e.g. "data"),
-	// not the internal binaryData.id. Passing the id can lead to "cannot read ... (reading 'id')".
 	const buffer = await this.helpers.getBinaryDataBuffer(itemIndex, binaryPropertyName);
 
-	// Create multipart form data manually (no external dependencies)
 	const boundary = `----formdata-n8n-${Math.random().toString(16)}`;
 	const CRLF = '\r\n';
 
-	// Build multipart body parts
 	const parts: Uint8Array[] = [];
 
-	// Add file part
 	parts.push(Buffer.from(`--${boundary}${CRLF}`));
 	parts.push(Buffer.from(`Content-Disposition: form-data; name="file"; filename="${filename}"${CRLF}`));
 	parts.push(Buffer.from(`Content-Type: application/pdf${CRLF}${CRLF}`));
 	parts.push(buffer);
 	parts.push(Buffer.from(`${CRLF}--${boundary}--${CRLF}`));
 
-	// Combine all parts
 	const bodyBuffer = Buffer.concat(parts);
 
-	// Upload file to Phacet
 	const uploadResponse = await this.helpers.httpRequestWithAuthentication.call(
 		this,
 		'phacetApi',
@@ -146,7 +135,6 @@ export class Phacet implements INodeType {
 				],
 				default: 'create',
 			},
-			// Create Row operation fields
 			{
 				displayName: 'Phacet Name or ID',
 				name: 'phacetId',
@@ -266,7 +254,6 @@ export class Phacet implements INodeType {
 					},
 				],
 			},
-			// Get Row operation fields
 			{
 				displayName: 'Phacet Name or ID',
 				name: 'phacetId',
@@ -402,7 +389,6 @@ export class Phacet implements INodeType {
 	methods = {
 		loadOptions: {
 			async getPhacets(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				// Récupérer tous les projets avec leurs tables via l'API v2
 				const projectsResponse = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
@@ -417,7 +403,6 @@ export class Phacet implements INodeType {
 
 				const allTables: INodePropertyOptions[] = [];
 
-				// Parcourir chaque projet et extraire ses tables
 				if (Array.isArray(projectsResponse)) {
 					projectsResponse.forEach((project: { id: string; name: string; tables: Array<{ id: string; name: string }> }) => {
 						if (project.tables && Array.isArray(project.tables)) {
@@ -441,7 +426,6 @@ export class Phacet implements INodeType {
 					return [];
 				}
 
-				// Récupérer tous les projets avec leurs tables et sessions via l'API v2
 				const projectsResponse = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
@@ -455,7 +439,6 @@ export class Phacet implements INodeType {
 				);
 
 				if (Array.isArray(projectsResponse)) {
-					// Parcourir tous les projets pour trouver la table sélectionnée
 					for (const project of projectsResponse) {
 						if (project.tables && Array.isArray(project.tables)) {
 							const selectedTable = project.tables.find((table: { id: string; sessions?: Array<{ id: string; name?: string }> }) => table.id === phacetId);
@@ -529,7 +512,6 @@ export class Phacet implements INodeType {
 							}>;
 						};
 
-						// Validate inputs
 						if (!phacetId) {
 							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
 						}
@@ -540,7 +522,6 @@ export class Phacet implements INodeType {
 							throw new NodeOperationError(this.getNode(), 'At least one cell is required', { itemIndex: i });
 						}
 
-						// Process cells
 						const processedCells: Array<{ columnId: string; value: string }> = [];
 
 						for (const cell of cells.cellValues) {
@@ -570,13 +551,11 @@ export class Phacet implements INodeType {
 							}
 						}
 
-						// Prepare the request body
 						const requestBody = {
 							sessionId,
 							cells: processedCells,
 						};
 
-						// Make the API call
 						const responseData = await this.helpers.httpRequestWithAuthentication.call(
 							this,
 							'phacetApi',
@@ -590,7 +569,6 @@ export class Phacet implements INodeType {
 							},
 						);
 
-						// Return the response data
 						const result = {
 							...responseData,
 						};
@@ -701,7 +679,6 @@ export class Phacet implements INodeType {
 							pairedItem: { item: i },
 						});
 					} else if (operation === 'get') {
-						// Get Row operation logic
 						const phacetId = this.getNodeParameter('phacetId', i) as string;
 						const rowId = this.getNodeParameter('rowId', i) as string;
 
