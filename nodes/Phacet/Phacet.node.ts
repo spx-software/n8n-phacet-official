@@ -402,28 +402,36 @@ export class Phacet implements INodeType {
 	methods = {
 		loadOptions: {
 			async getPhacets(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const options = {
-					method: 'GET' as const,
-					url: 'https://api.phacetlabs.com/api/v1/phacets',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				};
-
-				const response = await this.helpers.httpRequestWithAuthentication.call(
+				// Récupérer tous les projets avec leurs tables via l'API v2
+				const projectsResponse = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
-					options,
+					{
+						method: 'GET',
+						url: 'https://api.phacetlabs.com/api/v2/projects',
+						headers: {
+							'accept': 'application/json',
+						},
+					},
 				);
 
-				if (Array.isArray(response)) {
-					return response.map((phacet: { id: string; name?: string }) => ({
-						name: phacet.name || phacet.id,
-						value: phacet.id,
-					}));
+				const allTables: INodePropertyOptions[] = [];
+
+				// Parcourir chaque projet et extraire ses tables
+				if (Array.isArray(projectsResponse)) {
+					projectsResponse.forEach((project: { id: string; name: string; tables: Array<{ id: string; name: string }> }) => {
+						if (project.tables && Array.isArray(project.tables)) {
+							project.tables.forEach((table) => {
+								allTables.push({
+									name: table.name,
+									value: table.id,
+								});
+							});
+						}
+					});
 				}
 
-				return [];
+				return allTables.sort((a: INodePropertyOptions, b: INodePropertyOptions) => a.name.localeCompare(b.name));
 			},
 
 			async getSessions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
@@ -433,28 +441,32 @@ export class Phacet implements INodeType {
 					return [];
 				}
 
-				const options = {
-					method: 'GET' as const,
-					url: 'https://api.phacetlabs.com/api/v1/phacets',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				};
-
-				const response = await this.helpers.httpRequestWithAuthentication.call(
+				// Récupérer tous les projets avec leurs tables et sessions via l'API v2
+				const projectsResponse = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
-					options,
+					{
+						method: 'GET',
+						url: 'https://api.phacetlabs.com/api/v2/projects',
+						headers: {
+							'accept': 'application/json',
+						},
+					},
 				);
 
-				if (Array.isArray(response)) {
-					const selectedPhacet = response.find((phacet: { id: string; sessions?: { id: string; name?: string }[] }) => phacet.id === phacetId);
+				if (Array.isArray(projectsResponse)) {
+					// Parcourir tous les projets pour trouver la table sélectionnée
+					for (const project of projectsResponse) {
+						if (project.tables && Array.isArray(project.tables)) {
+							const selectedTable = project.tables.find((table: { id: string; sessions?: Array<{ id: string; name?: string }> }) => table.id === phacetId);
 
-					if (selectedPhacet && Array.isArray(selectedPhacet.sessions)) {
-						return selectedPhacet.sessions.map((session: { id: string; name?: string }) => ({
-							name: session.name || session.id,
-							value: session.id,
-						}));
+							if (selectedTable && Array.isArray(selectedTable.sessions)) {
+								return selectedTable.sessions.map((session: { id: string; name?: string }) => ({
+									name: session.name || session.id,
+									value: session.id,
+								})).sort((a: INodePropertyOptions, b: INodePropertyOptions) => a.name.localeCompare(b.name));
+							}
+						}
 					}
 				}
 
@@ -570,7 +582,7 @@ export class Phacet implements INodeType {
 							'phacetApi',
 							{
 								method: 'POST',
-								url: `https://api.phacetlabs.com/api/v1/phacets/${phacetId}/rows`,
+								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows`,
 								body: requestBody,
 								headers: {
 									'Content-Type': 'application/json',
