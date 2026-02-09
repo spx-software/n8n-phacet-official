@@ -1,6 +1,5 @@
 import type {
 	IDataObject,
-	IHookFunctions,
 	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
@@ -52,20 +51,16 @@ export class PhacetTrigger implements INodeType {
 						description: 'Triggers when a row calculation completes successfully in an AI Table',
 					},
 					{
-						name: 'Row Calculation Started',
-						value: 'row.calculation.started',
-						description: 'Triggers when a row calculation starts in an AI Table',
+						name: 'Row Calculation Failed',
+						value: 'row.calculation.failed',
+						description: 'Triggers when a row calculation fails in an AI Table',
 					},
 					{
 						name: 'Row Created',
 						value: 'row.created',
 						description: 'Triggers when a new row is created in a table',
 					},
-					{
-						name: 'Table Created',
-						value: 'phacet.created',
-						description: 'Triggers when a new table is created',
-					},
+ 
 				],
 			},
 			{
@@ -78,6 +73,15 @@ export class PhacetTrigger implements INodeType {
 				},
 				description:
 					'Filter events for a specific table. Leave empty to receive events from all tables. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				displayOptions: {
+					show: {
+						event: [
+							'row.calculation.completed',
+							'row.calculation.failed',
+							'row.created',
+						],
+					},
+				},
 			},
 			{
 				displayName: 'Resolve Data',
@@ -89,8 +93,8 @@ export class PhacetTrigger implements INodeType {
 				displayOptions: {
 					show: {
 						event: [
-							'row.calculation.completed',
-							'row.calculation.started',
+							'row.calculation.completed',	
+							'row.calculation.failed',
 							'row.created',
 						],
 					},
@@ -102,115 +106,65 @@ export class PhacetTrigger implements INodeType {
 	methods = {
 		loadOptions: {
 			async getPhacets(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const options = {
-					method: 'GET' as const,
-					url: 'https://api.phacetlabs.com/api/v1/phacets',
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				};
+				// Get the 'local' parameter
+				const local = true;
+				const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
 
-				const response = await this.helpers.httpRequestWithAuthentication.call(
-					this,
-					'phacetApi',
-					options,
-				);
-
-				if (Array.isArray(response)) {
-					return response.map((phacet: { id: string; name?: string }) => ({
-						name: phacet.name || phacet.id,
-						value: phacet.id,
-					}));
-				}
-
-				return [];
-			},
-		},
-	};
-
-	webhookMethods = {
-		default: {
-			async checkExists(this: IHookFunctions): Promise<boolean> {
-				const webhookData = this.getWorkflowStaticData('node');
-				return !!webhookData.endpointId;
-			},
-
-			async create(this: IHookFunctions): Promise<boolean> {
-				let webhookUrl = this.getNodeWebhookUrl('default') as string;
-
-				// Replace localhost with public domain for testing (Phacet API rejects localhost URLs)
-				webhookUrl = webhookUrl.replace(/http:\/\/localhost:\d+/, 'https://api.phacetlabs.com');
-
-				const event = this.getNodeParameter('event') as string;
-				const phacetId = this.getNodeParameter('phacetId', '') as string;
-
-				const body: IDataObject = {
-					url: webhookUrl,
-					eventTypes: [event],
-					description: `n8n trigger for ${event}`,
-				};
-
-				if (phacetId) {
-					body.phacetIds = [phacetId];
-				}
-
-				const response = await this.helpers.httpRequestWithAuthentication.call(
+				// Récupérer tous les projets avec leurs tables via l'API v2
+				const projectsResponse = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
 					{
-						method: 'POST',
-						url: 'https://api.phacetlabs.com/api/v2/webhooks/endpoints',
-						body,
+						method: 'GET',
+						url: `${baseUrl}/api/v2/projects`,
 						headers: {
-							'Content-Type': 'application/json',
+							'accept': 'application/json',
 						},
 					},
 				);
 
-				const webhookData = this.getWorkflowStaticData('node');
-				webhookData.endpointId = response.endpointId;
-				webhookData.secret = response.secret;
+				const allTables: INodePropertyOptions[] = [];
 
-				return true;
-			},
-
-			async delete(this: IHookFunctions): Promise<boolean> {
-				const webhookData = this.getWorkflowStaticData('node');
-				const endpointId = webhookData.endpointId as string;
-
-				if (endpointId) {
-					try {
-						await this.helpers.httpRequestWithAuthentication.call(
-							this,
-							'phacetApi',
-							{
-								method: 'DELETE',
-								url: `https://api.phacetlabs.com/api/v2/webhooks/endpoints/${endpointId}`,
-								headers: {
-									'Content-Type': 'application/json',
-								},
-							},
-						);
-					} catch {
-						// Ignore deletion errors — endpoint may already be removed
-					}
+				// Parcourir chaque projet et extraire ses tables
+				if (Array.isArray(projectsResponse)) {
+					projectsResponse.forEach((project: { id: string; name: string; tables: Array<{ id: string; name: string }> }) => {
+						if (project.tables && Array.isArray(project.tables)) {
+							project.tables.forEach((table) => {
+								allTables.push({
+									name: table.name,
+									value: table.id,
+								});
+							});
+						}
+					});
 				}
 
-				delete webhookData.endpointId;
-				delete webhookData.secret;
-
-				return true;
+				return allTables.sort((a: INodePropertyOptions, b: INodePropertyOptions) => a.name.localeCompare(b.name));
 			},
 		},
 	};
 
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
 		const body = this.getBodyData() as IDataObject;
+		const configuredEvent = this.getNodeParameter('event', 0) as string;
 		const phacetId = this.getNodeParameter('phacetId', 0) as string;
 		const resolveData = this.getNodeParameter('resolveData', 0) as boolean;
 
+		// Filter by event type - ignore if not matching
+		if (body.eventType !== configuredEvent) {
+			return { workflowData: [] };
+		}
+
 		// Extract event data — Phacet sends { eventType, eventId, data: { ... } }
 		const eventData = (body.data ?? body) as IDataObject;
+
+		// Filter by table - ignore if phacetId is configured and doesn't match
+		if (phacetId && eventData.phacetId && eventData.phacetId !== phacetId) {
+			return { workflowData: [] };
+		}
+
+		const local = true;
+		const baseUrl = local ? 'http://localhost:3001' : 'https://api.phacetlabs.com';
 
 		const outputData: IDataObject = {
 			eventType: body.eventType,
@@ -233,7 +187,7 @@ export class PhacetTrigger implements INodeType {
 					'phacetApi',
 					{
 						method: 'GET',
-						url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}`,
+						url: `${baseUrl}/api/v2/tables/${phacetId}/rows/${rowId}`,
 						headers: {
 							'Content-Type': 'application/json',
 						},
