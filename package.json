@@ -1,15 +1,18 @@
 {
     "name": "n8n-nodes-phacet-official",
     "version": "0.2.1",
-    "description": "n8n community node for Phacet API integration - upload files and manage spreadsheet data",
+    "description": "n8n community node for Phacet, the AI that prepares, reconciles and controls your financial data",
     "license": "MIT",
     "homepage": "https://phacetlabs.com",
     "keywords": [
         "n8n-community-node-package",
         "phacet",
-        "spreadsheet",
-        "data-management",
-        "file-upload"
+        "ai",
+        "finance",
+        "invoice",
+        "reconciliation",
+        "data-processing",
+        "automation"
     ],
     "author": {
         "name": "Christophe Lanternier",

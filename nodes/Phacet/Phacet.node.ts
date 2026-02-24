@@ -111,19 +111,19 @@ export class Phacet implements INodeType {
 					{
 						name: 'Create',
 						value: 'create',
-						description: 'Create a new row in a phacet',
+						description: 'Create a new row in a table',
 						action: 'Create a row',
 					},
 					{
 						name: 'Update',
 						value: 'update',
-						description: 'Updates an existing row in a specific AI Table with new cell values',
+						description: 'Updates an existing row in a specific table with new cell values',
 						action: 'Update a row',
 					},
 					{
 						name: 'Get',
 						value: 'get',
-						description: 'Retrieve a row by its ID from a specific AI Table',
+						description: 'Retrieve a row by its ID from a specific table',
 						action: 'Get a row',
 					},
 					{
@@ -136,8 +136,8 @@ export class Phacet implements INodeType {
 				default: 'create',
 			},
 			{
-				displayName: 'Phacet Name or ID',
-				name: 'phacetId',
+				displayName: 'Table Name or ID',
+				name: 'tableId',
 				type: 'options',
 				required: true,
 				displayOptions: {
@@ -150,7 +150,7 @@ export class Phacet implements INodeType {
 				typeOptions: {
 					loadOptionsMethod: 'getPhacets',
 				},
-				description: 'Select the phacet where the row will be created. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				description: 'Select the table where the row will be created. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Session Name or ID',
@@ -166,9 +166,9 @@ export class Phacet implements INodeType {
 				default: '',
 				typeOptions: {
 					loadOptionsMethod: 'getSessions',
-					loadOptionsDependsOn: ['phacetId'],
+					loadOptionsDependsOn: ['tableId'],
 				},
-				description: 'Select the session within the phacet. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				description: 'Select the session within the table. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Cells',
@@ -199,7 +199,7 @@ export class Phacet implements INodeType {
 								required: true,
 								typeOptions: {
 									loadOptionsMethod: 'getColumns',
-									loadOptionsDependsOn: ['phacetId'],
+									loadOptionsDependsOn: ['tableId'],
 								},
 								description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 							},
@@ -255,8 +255,8 @@ export class Phacet implements INodeType {
 				],
 			},
 			{
-				displayName: 'Phacet Name or ID',
-				name: 'phacetId',
+				displayName: 'Table Name or ID',
+				name: 'tableId',
 				type: 'options',
 				required: true,
 				displayOptions: {
@@ -269,7 +269,7 @@ export class Phacet implements INodeType {
 				typeOptions: {
 					loadOptionsMethod: 'getPhacets',
 				},
-				description: 'Select the phacet where the row will be retrieved. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+				description: 'Select the table where the row will be retrieved. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 			},
 			{
 				displayName: 'Row ID',
@@ -328,7 +328,7 @@ export class Phacet implements INodeType {
 								required: true,
 								typeOptions: {
 									loadOptionsMethod: 'getColumns',
-									loadOptionsDependsOn: ['phacetId'],
+									loadOptionsDependsOn: ['tableId'],
 								},
 								description: 'Select the column for this cell. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 							},
@@ -420,9 +420,9 @@ export class Phacet implements INodeType {
 			},
 
 			async getSessions(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const phacetId = this.getCurrentNodeParameter('phacetId');
+				const tableId = this.getCurrentNodeParameter('tableId');
 
-				if (!phacetId) {
+				if (!tableId) {
 					return [];
 				}
 
@@ -441,7 +441,7 @@ export class Phacet implements INodeType {
 				if (Array.isArray(projectsResponse)) {
 					for (const project of projectsResponse) {
 						if (project.tables && Array.isArray(project.tables)) {
-							const selectedTable = project.tables.find((table: { id: string; sessions?: Array<{ id: string; name?: string }> }) => table.id === phacetId);
+							const selectedTable = project.tables.find((table: { id: string; sessions?: Array<{ id: string; name?: string }> }) => table.id === tableId);
 
 							if (selectedTable && Array.isArray(selectedTable.sessions)) {
 								return selectedTable.sessions.map((session: { id: string; name?: string }) => ({
@@ -457,15 +457,15 @@ export class Phacet implements INodeType {
 			},
 
 			async getColumns(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
-				const phacetId = this.getCurrentNodeParameter('phacetId');
+				const tableId = this.getCurrentNodeParameter('tableId');
 
-				if (!phacetId) {
+				if (!tableId) {
 					return [];
 				}
 
 				const options = {
 					method: 'GET' as const,
-					url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}`,
+					url: `https://api.phacetlabs.com/api/v2/tables/${tableId}`,
 					headers: {
 						'Content-Type': 'application/json',
 					},
@@ -500,7 +500,7 @@ export class Phacet implements INodeType {
 			try {
 				if (resource === 'row') {
 					if (operation === 'create') {
-						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const tableId = this.getNodeParameter('tableId', i) as string;
 						const sessionId = this.getNodeParameter('sessionId', i) as string;
 						const cells = this.getNodeParameter('cells', i) as {
 							cellValues: Array<{
@@ -512,8 +512,8 @@ export class Phacet implements INodeType {
 							}>;
 						};
 
-						if (!phacetId) {
-							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						if (!tableId) {
+							throw new NodeOperationError(this.getNode(), 'Table ID is required', { itemIndex: i });
 						}
 						if (!sessionId) {
 							throw new NodeOperationError(this.getNode(), 'Session ID is required', { itemIndex: i });
@@ -561,7 +561,7 @@ export class Phacet implements INodeType {
 							'phacetApi',
 							{
 								method: 'POST',
-								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows`,
+								url: `https://api.phacetlabs.com/api/v2/tables/${tableId}/rows`,
 								body: requestBody,
 								headers: {
 									'Content-Type': 'application/json',
@@ -578,7 +578,7 @@ export class Phacet implements INodeType {
 							pairedItem: { item: i },
 						});
 					} else if (operation === 'update') {
-						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const tableId = this.getNodeParameter('tableId', i) as string;
 						const rowId = this.getNodeParameter('rowId', i) as string;
 						const cells = this.getNodeParameter('cells', i) as {
 							cellValues: Array<{
@@ -590,8 +590,8 @@ export class Phacet implements INodeType {
 							}>;
 						};
 
-						if (!phacetId) {
-							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						if (!tableId) {
+							throw new NodeOperationError(this.getNode(), 'Table ID is required', { itemIndex: i });
 						}
 						if (!rowId) {
 							throw new NodeOperationError(this.getNode(), 'Row ID is required', { itemIndex: i });
@@ -638,7 +638,7 @@ export class Phacet implements INodeType {
 							'phacetApi',
 							{
 								method: 'PUT',
-								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}`,
+								url: `https://api.phacetlabs.com/api/v2/tables/${tableId}/rows/${rowId}`,
 								body: requestBody,
 								headers: {
 									'Content-Type': 'application/json',
@@ -655,11 +655,11 @@ export class Phacet implements INodeType {
 							pairedItem: { item: i },
 						});
 					} else if (operation === 'getCellDownloadUrl') {
-						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const tableId = this.getNodeParameter('tableId', i) as string;
 						const cellId = this.getNodeParameter('cellId', i) as string;
 
-						if (!phacetId) {
-							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						if (!tableId) {
+							throw new NodeOperationError(this.getNode(), 'Table ID is required', { itemIndex: i });
 						}
 						if (!cellId) {
 							throw new NodeOperationError(this.getNode(), 'Cell ID is required', { itemIndex: i });
@@ -670,7 +670,7 @@ export class Phacet implements INodeType {
 							'phacetApi',
 							{
 								method: 'GET',
-								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/cells/${cellId}/download-file-url`,
+								url: `https://api.phacetlabs.com/api/v2/tables/${tableId}/cells/${cellId}/download-file-url`,
 							},
 						);	
 
@@ -679,11 +679,11 @@ export class Phacet implements INodeType {
 							pairedItem: { item: i },
 						});
 					} else if (operation === 'get') {
-						const phacetId = this.getNodeParameter('phacetId', i) as string;
+						const tableId = this.getNodeParameter('tableId', i) as string;
 						const rowId = this.getNodeParameter('rowId', i) as string;
 
-						if (!phacetId) {
-							throw new NodeOperationError(this.getNode(), 'Phacet ID is required', { itemIndex: i });
+						if (!tableId) {
+							throw new NodeOperationError(this.getNode(), 'Table ID is required', { itemIndex: i });
 						}
 						if (!rowId) {
 							throw new NodeOperationError(this.getNode(), 'Row ID is required', { itemIndex: i });
@@ -694,7 +694,7 @@ export class Phacet implements INodeType {
 							'phacetApi',
 							{
 								method: 'GET',
-								url: `https://api.phacetlabs.com/api/v2/tables/${phacetId}/rows/${rowId}`,
+								url: `https://api.phacetlabs.com/api/v2/tables/${tableId}/rows/${rowId}`,
 							},
 						);
 
