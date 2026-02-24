@@ -51,12 +51,12 @@ export class PhacetTrigger implements INodeType {
 					{
 						name: 'Row Calculation Completed',
 						value: 'row.calculation.completed',
-						description: 'Triggers when a row calculation completes successfully in an AI Table',
+						description: 'Triggers when a row calculation completes successfully in a table',
 					},
 					{
 						name: 'Row Calculation Failed',
 						value: 'row.calculation.failed',
-						description: 'Triggers when a row calculation fails in an AI Table',
+						description: 'Triggers when a row calculation fails in a table',
 					},
 					{
 						name: 'Row Created',
@@ -68,7 +68,7 @@ export class PhacetTrigger implements INodeType {
 			},
 			{
 				displayName: 'Table Name or ID',
-				name: 'phacetId',
+				name: 'tableId',
 				type: 'options',
 				required: true,
 				default: '',
@@ -76,7 +76,7 @@ export class PhacetTrigger implements INodeType {
 					loadOptionsMethod: 'getPhacets',
 				},
 				description:
-					'Select the table (phacetId / tableId) to create a dedicated webhook endpoint for. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
+					'Select the table to create a dedicated webhook endpoint for. Choose from the list, or specify an ID using an <a href="https://docs.n8n.io/code/expressions/">expression</a>.',
 				displayOptions: {
 					show: {
 						event: [
@@ -97,18 +97,18 @@ export class PhacetTrigger implements INodeType {
 					webhookEndpointId?: string;
 					webhookUrl?: string;
 					eventType?: string;
-					phacetId?: string;
+					tableId?: string;
 				};
 
 				const webhookUrl = this.getNodeWebhookUrl('default');
 				const eventType = this.getNodeParameter('event', 0) as string;
-				const phacetId = this.getNodeParameter('phacetId', 0) as string;
+				const tableId = this.getNodeParameter('tableId', 0) as string;
 
 				return (
 					!!staticData.webhookEndpointId &&
 					staticData.webhookUrl === webhookUrl &&
 					staticData.eventType === eventType &&
-					staticData.phacetId === phacetId
+					staticData.tableId === tableId
 				);
 			},
 
@@ -122,7 +122,7 @@ export class PhacetTrigger implements INodeType {
 					webhookSecret?: string;
 					webhookUrl?: string;
 					eventType?: string;
-					phacetId?: string;
+					tableId?: string;
 				};
 
 				const webhookUrl = this.getNodeWebhookUrl('default');
@@ -148,19 +148,19 @@ export class PhacetTrigger implements INodeType {
 				// }
 
 				const eventType = this.getNodeParameter('event', 0) as string;
-				const phacetId = this.getNodeParameter('phacetId', 0) as string;
+				const tableId = this.getNodeParameter('tableId', 0) as string;
 
 				if (!eventType) {
 					throw new NodeOperationError(this.getNode(), 'Event is required to create a webhook endpoint');
 				}
-				if (!phacetId) {
-					throw new NodeOperationError(this.getNode(), 'Table (phacetId) is required to create a webhook endpoint');
+				if (!tableId) {
+					throw new NodeOperationError(this.getNode(), 'Table ID is required to create a webhook endpoint');
 				}
 
 				const body = {
 					url: webhookUrl,
 					eventTypes: [eventType],
-					tableIds: [phacetId],
+					tableIds: [tableId],
 					description: `n8n workflow: ${this.getWorkflow().name}`,
 				};
 
@@ -182,7 +182,7 @@ export class PhacetTrigger implements INodeType {
 				staticData.webhookSecret = (response.secret as string | undefined) ?? staticData.webhookSecret;
 				staticData.webhookUrl = webhookUrl;
 				staticData.eventType = eventType;
-				staticData.phacetId = phacetId;
+				staticData.tableId = tableId;
 
 				return true;
 			},
@@ -193,7 +193,7 @@ export class PhacetTrigger implements INodeType {
 					webhookSecret?: string;
 					webhookUrl?: string;
 					eventType?: string;
-					phacetId?: string;
+					tableId?: string;
 				};
 
 				if (staticData.webhookEndpointId) {
@@ -217,7 +217,7 @@ export class PhacetTrigger implements INodeType {
 				delete staticData.webhookSecret;
 				delete staticData.webhookUrl;
 				delete staticData.eventType;
-				delete staticData.phacetId;
+				delete staticData.tableId;
 
 				return true;
 			},
@@ -265,7 +265,7 @@ export class PhacetTrigger implements INodeType {
 	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
 		const body = this.getBodyData() as IDataObject;
 		const configuredEvent = this.getNodeParameter('event', 0) as string;
-		const phacetId = this.getNodeParameter('phacetId', 0) as string;
+		const tableId = this.getNodeParameter('tableId', 0) as string;
 
 		if (body.eventType !== configuredEvent) {
 			return { workflowData: [] };
@@ -273,7 +273,7 @@ export class PhacetTrigger implements INodeType {
 
 		const eventData = (body.data ?? body) as IDataObject;
 
-		if (phacetId && eventData.phacetId && eventData.phacetId !== phacetId) {
+		if (tableId && eventData.tableId && eventData.tableId !== tableId) {
 			return { workflowData: [] };
 		}
 
@@ -286,20 +286,20 @@ export class PhacetTrigger implements INodeType {
 			...eventData,
 		};
 
-		if (phacetId) {
-			outputData.phacetId = phacetId;
+		if (tableId) {
+			outputData.tableId = tableId;
 		}
 
 		const rowId = eventData.rowId as string | undefined;
 
-		if (rowId && phacetId) {
+		if (rowId && tableId) {
 			try {
 				const rowData = await this.helpers.httpRequestWithAuthentication.call(
 					this,
 					'phacetApi',
 					{
 						method: 'GET',
-						url: `${baseUrl}/api/v2/tables/${phacetId}/rows/${rowId}`,
+						url: `${baseUrl}/api/v2/tables/${tableId}/rows/${rowId}`,
 						headers: {
 							'Content-Type': 'application/json',
 						},
@@ -307,7 +307,7 @@ export class PhacetTrigger implements INodeType {
 				);
 				outputData.row = rowData;
 			} catch {
-				this.logger.warn(`Failed to fetch row data for row ${rowId} in table ${phacetId}`);
+				this.logger.warn(`Failed to fetch row data for row ${rowId} in table ${tableId}`);
 			}
 		}
 

@@ -1,8 +1,8 @@
-# n8n-nodes-phacet
+# n8n-nodes-phacet-official
 
 ![Phacet Logo](https://raw.githubusercontent.com/spx-software/n8n-phacet-official/main/nodes/Phacet/phacet.svg)
 
-This is an n8n community node for [Phacet](https://phacetlabs.com), a powerful AI-driven spreadsheet platform. It allows you to upload files and manage spreadsheet data directly from your n8n workflows.
+This is an n8n community node for [Phacet](https://phacetlabs.com), the AI that prepares, reconciles and controls your financial data. Automate table operations; create rows, update data, retrieve results, and download files directly from your n8n workflows.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
 
@@ -28,11 +28,23 @@ Once installed, the Phacet node will be available in your node palette.
 
 ## Operations
 
-### File Operations
-- **Upload**: Upload PDF files to Phacet for processing
+This package includes **two nodes**:
+
+- **Phacet**: manage rows in your Phacet tables
+- **Phacet Trigger**: start workflows when Phacet events occur (webhooks)
 
 ### Row Operations
-- **Create**: Create new rows in Phacet spreadsheets with dynamic column mapping
+
+- **Create**: Create new rows in a table with dynamic column mapping (supports inline file upload)
+- **Update**: Update an existing row with new cell values
+- **Get**: Retrieve a row by its ID
+- **Get Cell Download URL**: Get a temporary download URL for a file stored in a file-type column
+
+### Trigger Operations (Phacet Trigger)
+
+- **Row Calculation Completed** (`row.calculation.completed`)
+- **Row Calculation Failed** (`row.calculation.failed`)
+- **Row Created** (`row.created`)
 
 ## Credentials
 
@@ -40,8 +52,8 @@ You need a Phacet API key to use this node.
 
 ### Getting your Phacet API Key
 
-1. Log in to your [Phacet dashboard](https://app.phacetlabs.com)
-2. Go to **Settings** or **API Settings**
+1. Log in to your [Phacet account](https://app.phacetlabs.com)
+2. Go to **Settings > API**
 3. Generate a new API key
 4. Copy the API key
 
@@ -58,46 +70,70 @@ You need a Phacet API key to use this node.
 
 ## Usage
 
-### Upload Files
-
-Use the **Upload** operation to send PDF files to Phacet:
-
-1. Add the Phacet node to your workflow
-2. Select **File** as the resource
-3. Select **Upload** as the operation
-4. Configure your file input (usually from a previous node)
-5. The node returns the uploaded file information including the file ID
-
 ### Create Rows
 
-Use the **Create** operation to add new rows to your Phacet spreadsheets:
+Use the **Create** operation to add new rows to your Phacet tables:
 
 1. Add the Phacet node to your workflow
 2. Select **Row** as the resource
 3. Select **Create** as the operation
-4. Choose your **Phacet** from the dynamic dropdown
-5. Choose your **Session** from the dynamic dropdown (based on selected phacet)
-6. Map your data to **Columns** using the dynamic column selector
+4. Choose your **Table** from the dynamic dropdown
+5. Choose your **Session** from the dynamic dropdown (based on selected table)
+6. Map your data to **Cells** using the dynamic column selector (Text and/or File)
 7. The node returns the created row information
+
+For file-type columns, you can pass a file directly — no separate upload step needed.
+
+### Update Rows
+
+Use the **Update** operation to modify existing rows: select Row > Update, specify the Table and Row ID, then map your updated values to columns.
+
+### Get Rows
+
+Use the **Get** operation to retrieve a row by its ID from a specific table.
+
+### Get Cell Download URL
+
+Use the **Get Cell Download URL** operation to get a temporary download link for files stored in file-type columns.
+
+### Phacet Trigger (Webhooks)
+
+Use **Phacet Trigger** to start a workflow when Phacet emits events:
+
+Supported events:
+
+- **Row Calculation Completed** (`row.calculation.completed`)
+- **Row Calculation Failed** (`row.calculation.failed`)
+- **Row Created** (`row.created`)
+
+1. Add **Phacet Trigger**
+2. Select an **Event**
+3. Select the **Table Name or ID**
+4. Activate the workflow (the node creates a webhook endpoint in Phacet)
+
+> Your n8n webhook URL must be publicly reachable by Phacet (important for self-hosted setups behind NAT/proxy).
 
 ### Dynamic Dropdowns
 
 This node features intelligent dynamic dropdowns that:
-- Load your available phacets automatically
-- Show sessions based on your selected phacet
+
+- Load your available tables automatically
+- Show sessions based on your selected table
 - Display column names (not just IDs) for easy mapping
 - Update in real-time as you make selections
 
 ## Example Workflows
 
-### PDF Processing Pipeline
+### Invoice Processing
+
 ```
-Email Trigger → Extract Attachments → Phacet Upload → Create Row with File ID
+Email Trigger → Extract Attachments → Phacet Create Row (with invoice file) → Notification
 ```
 
-### Data Import Workflow
+### Bank Reconciliation
+
 ```
-HTTP Request → JSON Processing → Phacet Create Row → Notification
+SFTP/HTTP → Fetch bank statements → Phacet Create Row → Wait for calculation → Get Row results
 ```
 
 ## Resources
