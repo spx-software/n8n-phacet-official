@@ -9,7 +9,7 @@ import type {
 	ILoadOptionsFunctions,
 } from 'n8n-workflow';
 
-import { NodeOperationError } from 'n8n-workflow';
+import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
 export class PhacetTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -25,7 +25,7 @@ export class PhacetTrigger implements INodeType {
 			name: 'Phacet Trigger',
 		},
 		inputs: [],
-		outputs: ['main'],
+		outputs: [NodeConnectionTypes.Main],
 		credentials: [
 			{
 				name: 'phacetApi',
