@@ -1,5 +1,6 @@
 import {
 	IAuthenticateGeneric,
+	Icon,
 	ICredentialTestRequest,
 	ICredentialType,
 	INodeProperties,
@@ -9,6 +10,7 @@ export class PhacetApi implements ICredentialType {
 	name = 'phacetApi';
 	displayName = 'Phacet API';
 	documentationUrl = 'https://docs.phacetlabs.com/';
+	icon: Icon = 'file:phacet.svg';
 	properties: INodeProperties[] = [
 		{
 			displayName: 'API Key',
