@@ -383,6 +383,19 @@ export class Phacet implements INodeType {
 					},
 				],
 			},
+			{
+				displayName: 'Run Row',
+				name: 'runRow',
+				type: 'boolean',
+				displayOptions: {
+					show: {
+						resource: ['row'],
+						operation: ['update'],
+					},
+				},
+				default: true,
+				description: 'Whether to trigger the row\'s workflow run after the update. Disable to update cell values without re-running the row.',
+			},
 					],
 	};
 
@@ -580,6 +593,7 @@ export class Phacet implements INodeType {
 					} else if (operation === 'update') {
 						const tableId = this.getNodeParameter('tableId', i) as string;
 						const rowId = this.getNodeParameter('rowId', i) as string;
+						const runRow = this.getNodeParameter('runRow', i, true) as boolean;
 						const cells = this.getNodeParameter('cells', i) as {
 							cellValues: Array<{
 								columnId: string;
@@ -631,6 +645,7 @@ export class Phacet implements INodeType {
 
 						const requestBody = {
 							cells: processedCells,
+							runRow,
 						};
 
 						const responseData = await this.helpers.httpRequestWithAuthentication.call(
